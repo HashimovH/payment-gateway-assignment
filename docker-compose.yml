@@ -1,0 +1,51 @@
+services:
+  api:
+    container_name: payment_gateway_api
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      BANK_URL: http://bank_simulator:8080
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway}@postgres:5432/${POSTGRES_DB:-payment_gateway}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      bank_simulator:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/liveness')"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  postgres:
+    container_name: payment_gateway_db
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gateway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gateway}
+      POSTGRES_DB: ${POSTGRES_DB:-payment_gateway}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  bank_simulator:
+    container_name: bank_simulator
+    image: bbyars/mountebank:2.8.1
+    ports:
+      - "2525:2525"
+      - "8080:8080"
+    command: --configfile /imposters/bank_simulator.ejs --allowInjection
+    volumes:
+      - type: bind
+        source: ./imposters
+        target: /imposters
+
+volumes:
+  postgres_data:
