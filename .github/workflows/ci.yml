@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+    paths: &code-paths
+      - "payment_gateway_api/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "poetry.lock"
+      - ".github/workflows/ci.yml"
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths: *code-paths
+  workflow_dispatch:
+
+# Cancel an in-progress run when a newer commit is pushed to the same branch/PR.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.15"
+  POETRY_VERSION: "1.8.4"
+  # Keep in sync with ruff in pyproject.toml / poetry.lock.
+  RUFF_VERSION: "0.17.4"
+
+jobs:
+  lint:
+    name: Lint
+    # Draft PRs are work in progress: skip until marked ready for review.
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      # Ruff is a single binary: no Python setup or dependency install needed.
+      - name: Ruff lint
+        run: pipx run "ruff==${RUFF_VERSION}" check . --output-format=github
+
+      - name: Ruff format check
+        run: pipx run "ruff==${RUFF_VERSION}" format --check .
+
+  unit-tests:
+    name: Unit tests
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Poetry
+        run: pipx install "poetry==${POETRY_VERSION}"
+
+      # cache: poetry caches Poetry's download cache and the virtualenv, keyed
+      # on poetry.lock: a hit skips almost all of the install.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: poetry
+
+      - name: Install dependencies
+        run: |
+          poetry env use python
+          poetry install --no-interaction
+
+      - name: Run unit tests with coverage
+        run: poetry run pytest tests/unit --cov --cov-report=term-missing
+
+      - name: Coverage summary
+        if: always()
+        run: poetry run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"

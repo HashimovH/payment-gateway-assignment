@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from payment_gateway_api.enums import Currency
-from payment_gateway_api.schemas.payment_request import PaymentRequest, PaymentRequestResponse
+from payment_gateway_api.schemas.payment_request import PaymentRequest, PaymentResponse
 
 NOW = datetime.now(UTC)
 
@@ -152,22 +152,22 @@ def valid_response(**overrides) -> dict:
 
 
 def test_payment_response_serializes_to_api_shape():
-    response = PaymentRequestResponse.model_validate(valid_response(card_number_last_four="0123"))
+    response = PaymentResponse.model_validate(valid_response(card_number_last_four="0123"))
 
     assert response.model_dump(mode="json") == valid_response(card_number_last_four="0123")
 
 
 @pytest.mark.parametrize("status", ["Authorized", "Declined"])
 def test_payment_response_accepts_bank_outcomes(status):
-    assert PaymentRequestResponse.model_validate(valid_response(status=status)).status == status
+    assert PaymentResponse.model_validate(valid_response(status=status)).status == status
 
 
 @pytest.mark.parametrize("status", ["Rejected", "authorized", "Pending"])
 def test_payment_response_rejects_other_statuses(status):
     with pytest.raises(ValidationError):
-        PaymentRequestResponse.model_validate(valid_response(status=status))
+        PaymentResponse.model_validate(valid_response(status=status))
 
 
 def test_payment_response_has_no_full_card_number_or_cvv_fields():
-    assert "card_number" not in PaymentRequestResponse.model_fields
-    assert "cvv" not in PaymentRequestResponse.model_fields
+    assert "card_number" not in PaymentResponse.model_fields
+    assert "cvv" not in PaymentResponse.model_fields

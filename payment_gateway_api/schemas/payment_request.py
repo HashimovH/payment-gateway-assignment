@@ -30,7 +30,7 @@ class PaymentRequest(SchemaBase):
         return self.card_number[-4:]
 
 
-class PaymentRequestResponse(SchemaBase):
+class PaymentResponse(SchemaBase):
     id: UUID
     status: Literal[PaymentStatus.AUTHORIZED, PaymentStatus.DECLINED]
     card_number_last_four: str = Field(min_length=4, max_length=4, pattern=DIGITS_ONLY)
