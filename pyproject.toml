@@ -16,7 +16,40 @@ httpx = "^0.28.1"
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.2.0"
 requests = "^2.34.2"
+ruff = "^0.17.4"
+pytest-cov = "^7.1.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py315"
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # import sorting
+    "B",       # bugbear
+    "UP",      # pyupgrade
+    "SIM",     # simplify
+]
+
+[tool.coverage.run]
+source = ["payment_gateway_api"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

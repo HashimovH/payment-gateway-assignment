@@ -1,5 +1,3 @@
-from typing import Dict
-
 from fastapi import FastAPI
 
 from payment_gateway_api.routers import health, payments
@@ -11,5 +9,5 @@ app.include_router(payments.router)
 
 
 @app.get("/")
-async def ping() -> Dict[str, str]:
+async def ping() -> dict[str, str]:
     return {"app": "payment-gateway-api"}

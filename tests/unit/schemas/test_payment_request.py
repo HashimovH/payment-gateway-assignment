@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from payment_gateway_api.enums import Currency, PaymentStatus
+from payment_gateway_api.enums import Currency
 from payment_gateway_api.schemas.payment_request import PaymentRequest, PaymentRequestResponse
 
 NOW = datetime.now(UTC)
@@ -45,13 +45,13 @@ def test_card_number_accepts_14_to_19_digits_including_leading_zero(card_number)
 @pytest.mark.parametrize(
     "card_number",
     [
-        "1" * 13,                # too short
-        "1" * 20,                # too long
-        "2222 4053 4324 8877",   # spaces
-        "2222-4053-4324-8877",   # dashes
-        "22224053432488a7",      # letter
-        "١٢٣٤٥٦٧٨٩٠١٢٣٤",        # non-ASCII digits
-        2222405343248877,        # int, not string
+        "1" * 13,  # too short
+        "1" * 20,  # too long
+        "2222 4053 4324 8877",  # spaces
+        "2222-4053-4324-8877",  # dashes
+        "22224053432488a7",  # letter
+        "١٢٣٤٥٦٧٨٩٠١٢٣٤",  # non-ASCII digits
+        2222405343248877,  # int, not string
     ],
 )
 def test_card_number_rejects_invalid_values(card_number):
@@ -91,7 +91,6 @@ def test_expiry_year_rejects_non_integers(year):
     assert_invalid("expiry_year", expiry_year=year)
 
 
-
 @pytest.mark.parametrize("currency", ["USD", "EUR", "GBP"])
 def test_supported_currencies_are_accepted(currency):
     assert PaymentRequest.model_validate(valid_payload(currency=currency)).currency == currency
@@ -102,7 +101,6 @@ def test_unsupported_or_malformed_currency_is_rejected(currency):
     assert_invalid("currency", currency=currency)
 
 
-
 @pytest.mark.parametrize("amount", [1, 1050, 10**12])
 def test_amount_accepts_positive_integers(amount):
     assert PaymentRequest.model_validate(valid_payload(amount=amount)).amount == amount
@@ -111,6 +109,7 @@ def test_amount_accepts_positive_integers(amount):
 @pytest.mark.parametrize("amount", [0, -1, 10.5, 10.0, "1050", True])
 def test_amount_rejects_non_positive_and_non_integers(amount):
     assert_invalid("amount", amount=amount)
+
 
 @pytest.mark.parametrize("cvv", ["123", "1234", "012"])
 def test_cvv_accepts_3_or_4_digits_including_leading_zero(cvv):
