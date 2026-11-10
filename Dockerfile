@@ -14,6 +14,8 @@ RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 COPY pyproject.toml poetry.lock README.md ./
 RUN poetry install --only main --no-root
 
+COPY alembic.ini ./
+COPY migrations ./migrations
 COPY payment_gateway_api ./payment_gateway_api
 
 EXPOSE 8000

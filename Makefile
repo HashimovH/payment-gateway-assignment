@@ -24,6 +24,15 @@ format:
 	@poetry run ruff check . --fix
 	@poetry run ruff format .
 
+.PHONY: migrate
+migrate:
+	@poetry run alembic upgrade head
+
+# make create-merchant NAME="Acme Shop"
+.PHONY: create-merchant
+create-merchant:
+	@poetry run python -m payment_gateway_api.cli create-merchant "$(NAME)"
+
 .PHONY: coverage
 coverage:
 	@poetry run python -m pytest --cov --cov-report=term-missing --cov-report=html

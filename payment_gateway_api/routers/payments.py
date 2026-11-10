@@ -1,6 +1,12 @@
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-router = APIRouter(prefix="/payments", tags=["payments"])
+from payment_gateway_api.dependencies.merchants import get_current_merchant
+
+router = APIRouter(
+    prefix="/payments",
+    tags=["payments"],
+    dependencies=[Depends(get_current_merchant)],
+)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
