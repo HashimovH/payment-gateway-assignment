@@ -1,8 +1,8 @@
 from datetime import UTC, datetime
-from typing import Literal, Self
+from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, StrictInt, model_validator
+from pydantic import Field, StrictInt, ValidationInfo, field_validator
 
 from payment_gateway_api.enums import Currency, PaymentStatus
 from payment_gateway_api.schemas.base import SchemaBase
@@ -18,12 +18,14 @@ class PaymentRequest(SchemaBase):
     amount: StrictInt = Field(gt=0)
     cvv: str = Field(min_length=3, max_length=4, pattern=DIGITS_ONLY, repr=False)
 
-    @model_validator(mode="after")
-    def card_not_expired(self) -> Self:
+    @field_validator("expiry_year")
+    @classmethod
+    def card_not_expired(cls, year: int, info: ValidationInfo) -> int:
+        month = info.data.get("expiry_month")
         now = datetime.now(UTC)
-        if (self.expiry_year, self.expiry_month) < (now.year, now.month):
+        if month is not None and (year, month) < (now.year, now.month):
             raise ValueError("Card expiry date must be in the future")
-        return self
+        return year
 
     @property
     def card_number_last_four(self) -> str:
@@ -38,3 +40,19 @@ class PaymentResponse(SchemaBase):
     expiry_year: int
     currency: Currency
     amount: int = Field(description="Amount in minor currency units, e.g. 1050 = 10.50")
+
+
+class ValidationErrorDetail(SchemaBase):
+    field: str
+    message: str
+
+
+class RejectedPaymentResponse(SchemaBase):
+    """400 response for invalid requests: the bank is never called, nothing is stored.
+
+    Only field names and messages are returned, never the submitted values,
+    so a mistyped card number isn't echoed back.
+    """
+
+    status: Literal[PaymentStatus.REJECTED] = PaymentStatus.REJECTED
+    errors: list[ValidationErrorDetail]
