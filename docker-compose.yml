@@ -4,6 +4,8 @@ services:
     build: .
     ports:
       - "8000:8000"
+    volumes:
+      - ./payment_gateway_api:/app/payment_gateway_api
     environment:
       BANK_URL: http://bank_simulator:8080
       DATABASE_URL: postgresql://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway}@postgres:5432/${POSTGRES_DB:-payment_gateway}
