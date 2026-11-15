@@ -10,4 +10,9 @@ class Currency(StrEnum):
 class PaymentStatus(StrEnum):
     AUTHORIZED = "Authorized"
     DECLINED = "Declined"
+
+
+class PaymentRequestStatus(StrEnum):
+    AUTHORIZED = "Authorized"
+    DECLINED = "Declined"
     REJECTED = "Rejected"
