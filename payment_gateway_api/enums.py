@@ -11,9 +11,3 @@ class PaymentStatus(StrEnum):
     PENDING = "Pending"
     AUTHORIZED = "Authorized"
     DECLINED = "Declined"
-
-
-class PaymentRequestStatus(StrEnum):
-    AUTHORIZED = "Authorized"
-    DECLINED = "Declined"
-    REJECTED = "Rejected"

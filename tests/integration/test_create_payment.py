@@ -202,6 +202,7 @@ async def test_invalid_payment_request_is_rejected(client, api_key, overrides, f
 
     assert response.status_code == 400
     body = response.json()
+    assert "status" not in body
     assert body["code"] == "validation_error"
     assert field in {e["field"] for e in body["details"]["errors"]}
     # Submitted card data is never echoed back in error responses.
@@ -228,6 +229,17 @@ async def test_unknown_field_is_rejected(client, api_key):
     assert response.json()["code"] == "validation_error"
 
 
+async def test_rejected_request_stores_nothing(client, api_key):
+    key = str(uuid.uuid4())
+
+    rejected = await create_payment(client, api_key, payment_payload(cvv="1"), key)
+    corrected = await create_payment(client, api_key, payment_payload(), key)
+
+    assert rejected.status_code == 400
+    assert corrected.status_code == 201
+    assert corrected.json()["status"] == "Authorized"
+
+
 async def test_bank_unavailable_returns_503(client, api_key):
     response = await create_payment(
         client, api_key, payment_payload(card_number=BANK_UNAVAILABLE_CARD)
@@ -235,6 +247,18 @@ async def test_bank_unavailable_returns_503(client, api_key):
 
     assert response.status_code == 503
     assert response.json()["code"] == "bank_unavailable"
+
+
+async def test_bank_unavailable_releases_idempotency_key(client, api_key):
+    key = str(uuid.uuid4())
+    payload = payment_payload(card_number=BANK_UNAVAILABLE_CARD)
+
+    first = await create_payment(client, api_key, payload, key)
+    retry = await create_payment(client, api_key, payload, key)
+
+    assert first.status_code == 503
+    assert retry.status_code == 503
+    assert retry.json()["code"] == "bank_unavailable"
 
 
 async def test_reusing_idempotency_key_with_different_body_is_rejected(client, api_key):

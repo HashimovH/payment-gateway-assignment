@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from payment_gateway_api.db import get_engine
+from payment_gateway_api.dependencies.payments import close_bank_client
 from payment_gateway_api.exception_handlers import register_exception_handlers
 from payment_gateway_api.routers import health, payments
 
@@ -11,6 +12,7 @@ from payment_gateway_api.routers import health, payments
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     yield
+    await close_bank_client()
     await get_engine().dispose()  # close pooled DB connections on shutdown
 
 

@@ -26,9 +26,7 @@ class Payment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("amount > 0", name="amount"),
         CheckConstraint("expiry_month BETWEEN 1 AND 12", name="expiry_month"),
-        CheckConstraint(
-            "card_number_last_four ~ '^[0-9]{4}$'", name="card_number_last_four"
-        ),
+        CheckConstraint("card_number_last_four ~ '^[0-9]{4}$'", name="card_number_last_four"),
         CheckConstraint(
             "(status = 'Authorized') = (authorization_code IS NOT NULL)",
             name="authorization_code_matches_status",

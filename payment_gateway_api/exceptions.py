@@ -37,6 +37,19 @@ class PaymentNotFoundError(GatewayError):
     default_message = "Payment not found"
 
 
+class PaymentInProgressError(GatewayError):
+    http_status = status.HTTP_409_CONFLICT
+    error_code = "payment_in_progress"
+    default_message = "A payment with this Idempotency-Key is still being processed, retry later"
+    headers = {"Retry-After": "1"}
+
+
+class IdempotencyKeyReusedError(GatewayError):
+    http_status = status.HTTP_422_UNPROCESSABLE_CONTENT
+    error_code = "idempotency_key_reused"
+    default_message = "This Idempotency-Key was already used with a different request"
+
+
 class BankUnavailableError(GatewayError):
     http_status = status.HTTP_503_SERVICE_UNAVAILABLE
     error_code = "bank_unavailable"

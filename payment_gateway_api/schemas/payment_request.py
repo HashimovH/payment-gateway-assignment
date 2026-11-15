@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import Field, StrictInt, ValidationInfo, field_validator
 
-from payment_gateway_api.enums import Currency, PaymentRequestStatus, PaymentStatus
+from payment_gateway_api.enums import Currency, PaymentStatus
 from payment_gateway_api.schemas.base import SchemaBase
 
 DIGITS_ONLY = r"^[0-9]+$"
@@ -34,25 +34,9 @@ class PaymentRequest(SchemaBase):
 
 class PaymentResponse(SchemaBase):
     id: UUID
-    status: PaymentStatus
+    status: Literal[PaymentStatus.AUTHORIZED, PaymentStatus.DECLINED]
     card_number_last_four: str = Field(min_length=4, max_length=4, pattern=DIGITS_ONLY)
     expiry_month: int
     expiry_year: int
     currency: Currency
     amount: int = Field(description="Amount in minor currency units, e.g. 1050 = 10.50")
-
-
-class ValidationErrorDetail(SchemaBase):
-    field: str
-    message: str
-
-
-class RejectedPaymentResponse(SchemaBase):
-    """400 response for invalid requests: the bank is never called, nothing is stored.
-
-    Only field names and messages are returned, never the submitted values,
-    so a mistyped card number isn't echoed back.
-    """
-
-    status: Literal[PaymentRequestStatus.REJECTED] = PaymentRequestStatus.REJECTED
-    errors: list[ValidationErrorDetail]
