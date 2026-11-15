@@ -1,8 +1,12 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from payment_gateway_api.dependencies.idempotency import IdempotencyKey
-from payment_gateway_api.dependencies.merchants import get_current_merchant
-from payment_gateway_api.schemas.payment_request import PaymentRequest
+from payment_gateway_api.dependencies.merchants import CurrentMerchant, get_current_merchant
+from payment_gateway_api.dependencies.payments import PaymentServiceDep
+from payment_gateway_api.schemas.payment_request import PaymentRequest, PaymentResponse
+from payment_gateway_api.services.payments import PaymentNotFoundError
 
 router = APIRouter(
     prefix="/payments",
@@ -16,6 +20,12 @@ async def process_payment(data: PaymentRequest, idempotency_key: IdempotencyKey)
     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "Not implemented yet")
 
 
-@router.get("/{payment_id}")
-async def get_payment(payment_id: str):
-    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "Not implemented yet")
+@router.get(
+    "/{payment_id}",
+)
+async def get_payment(
+    payment_id: uuid.UUID,
+    merchant: CurrentMerchant,
+    service: PaymentServiceDep,
+) -> PaymentResponse:
+    return await service.get_payment(payment_id, merchant.id)
