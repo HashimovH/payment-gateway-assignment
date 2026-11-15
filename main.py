@@ -7,6 +7,7 @@ def main():
         host="0.0.0.0",
         port=8000,
         reload=True,
+        reload_dirs=["payment_gateway_api"],
         workers=1,
     )
 

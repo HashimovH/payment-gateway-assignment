@@ -69,15 +69,16 @@ def test_requests_without_a_valid_key_get_401(client, method, path, headers):
 
     assert response.status_code == 401
     assert response.headers["WWW-Authenticate"] == "Bearer"
-    assert response.json() == {"detail": "Invalid or missing API key"}
+    assert response.json() == {"code": "unauthorized", "message": "Invalid or missing API key"}
 
 
 @pytest.mark.parametrize(("method", "path"), PROTECTED)
 def test_valid_key_passes_authentication(client, method, path):
     response = client.request(method, path, headers=bearer(VALID_KEY))
 
-    # Endpoints are still stubs: reaching them is what proves auth passed.
-    assert response.status_code == 501
+    # No body / malformed id: reaching request validation is what proves auth passed.
+    assert response.status_code == 400
+    assert response.json()["code"] == "validation_error"
 
 
 @pytest.mark.parametrize("path", ["/", "/health", "/liveness"])
