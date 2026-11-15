@@ -44,6 +44,7 @@ class Payment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("merchants.id", ondelete="RESTRICT"), index=True
     )
     idempotency_key: Mapped[str] = mapped_column(String(255))
+    request_fingerprint: Mapped[str] = mapped_column(String(64))
     status: Mapped[PaymentStatus] = mapped_column(
         Enum(PaymentStatus, name="payment_status", values_callable=_enum_values)
     )

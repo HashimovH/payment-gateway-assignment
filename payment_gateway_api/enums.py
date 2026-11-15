@@ -8,6 +8,7 @@ class Currency(StrEnum):
 
 
 class PaymentStatus(StrEnum):
+    PENDING = "Pending"
     AUTHORIZED = "Authorized"
     DECLINED = "Declined"
 
