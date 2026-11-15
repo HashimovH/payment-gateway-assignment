@@ -6,5 +6,7 @@ venv
 **/__pycache__
 *.py[cod]
 .env
-tests
 imposters
+.coverage
+htmlcov
+.ruff_cache

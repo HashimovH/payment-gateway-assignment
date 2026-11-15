@@ -6,6 +6,15 @@ install:
 run:
 	@poetry run python main.py
 
+# make run-prod            -> 4 workers
+# make run-prod WORKERS=8
+WORKERS ?= 4
+.PHONY: run-prod
+run-prod: export ENVIRONMENT = production
+run-prod:
+	@poetry run uvicorn payment_gateway_api.app:app --host 0.0.0.0 --port 8000 \
+		--workers $(WORKERS) --proxy-headers --no-server-header
+
 .PHONY: test
 test: test-db-up
 	@poetry run python -m pytest -vv --cov --cov-report=term-missing
