@@ -16,6 +16,7 @@ pydantic-settings = "^2.16.2"
 sqlalchemy = {version = "^2.1.8", extras = ["asyncio"]}
 alembic = "^1.20.1"
 asyncpg = "^0.32.0"
+structlog = "^26.1.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.2.0"

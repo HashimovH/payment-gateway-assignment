@@ -1,5 +1,6 @@
 from typing import Annotated
 
+import structlog
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,7 @@ async def get_current_merchant(
     )
     if merchant is None:
         raise UnauthorizedError()
+    structlog.contextvars.bind_contextvars(merchant_id=str(merchant.id))
     return merchant
 
 

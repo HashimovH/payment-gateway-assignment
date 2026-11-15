@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     app_name: str = "payment-gateway-api"
     environment: Literal["local", "test", "production"] = "local"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    log_format: Literal["json", "console"] | None = None
 
     # Acquiring bank (simulator)
     bank_url: str = "http://localhost:8080"

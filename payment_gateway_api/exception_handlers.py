@@ -6,10 +6,10 @@
 - anything else           -> 500 internal_error, logged, no internals leaked
 """
 
-import logging
 from http import HTTPStatus
 from typing import Any
 
+import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -18,7 +18,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from payment_gateway_api.exceptions import GatewayError
 from payment_gateway_api.schemas.errors import ErrorResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # Where a value came from; dropped from the field name ("body.amount" -> "amount").
 _LOCATIONS = {"body", "query", "path", "header", "cookie"}
@@ -76,8 +76,8 @@ async def handle_http_exception(_request: Request, exc: Exception) -> JSONRespon
     return error_response(exc.status_code, code, message, headers=exc.headers)
 
 
-async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
+async def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("unhandled_error")
     return error_response(
         status.HTTP_500_INTERNAL_SERVER_ERROR,
         GatewayError.error_code,

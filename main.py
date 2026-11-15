@@ -9,6 +9,7 @@ def main():
         reload=True,
         reload_dirs=["payment_gateway_api"],
         workers=1,
+        log_config=None,
     )
 
 

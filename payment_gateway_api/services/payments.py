@@ -2,9 +2,9 @@ import asyncio
 import contextlib
 import hashlib
 import json
-import logging
 import uuid
 
+import structlog
 from sqlalchemy.exc import DBAPIError
 
 from payment_gateway_api.clients.bank import BankClient, BankPaymentResponse
@@ -25,7 +25,7 @@ from payment_gateway_api.models.payment import Payment
 from payment_gateway_api.repositories.payments import PaymentRepository
 from payment_gateway_api.schemas.payment_request import PaymentRequest, PaymentResponse
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def request_fingerprint(data: PaymentRequest) -> str:
@@ -90,6 +90,13 @@ class PaymentService:
         status = PaymentStatus.AUTHORIZED if bank_response.authorized else PaymentStatus.DECLINED
         code = bank_response.authorization_code if bank_response.authorized else None
         saved = await self._save_outcome(payment, status, code)
+        logger.info(
+            "payment_processed",
+            payment_id=saved.id,
+            status=saved.status,
+            amount=saved.amount,
+            currency=saved.currency,
+        )
         return PaymentResponse.model_validate(saved)
 
     async def _replay(
@@ -102,19 +109,23 @@ class PaymentService:
             raise IdempotencyKeyReusedError()
         if existing.status is PaymentStatus.PENDING:
             raise PaymentInProgressError(details={"payment_id": str(existing.id)})
+        logger.info("payment_replayed", payment_id=existing.id, status=existing.status)
         return PaymentResponse.model_validate(existing)
 
     async def _authorize(self, payment: Payment, data: PaymentRequest) -> BankPaymentResponse:
         try:
             response = await self._bank_client.authorize_payment(data)
         except ExternalServiceUnavailableError as exc:
+            logger.warning("bank_unavailable", payment_id=payment.id, error=str(exc))
             await self._release(payment)
             raise BankUnavailableError() from exc
         except ExternalServiceBadResponseError as exc:
+            logger.error("bank_bad_response", payment_id=payment.id, error=str(exc))
             await self._release(payment)
             raise BankBadResponseError() from exc
 
         if response.authorized and not response.authorization_code:
+            logger.error("bank_authorized_without_code", payment_id=payment.id)
             await self._release(payment)
             raise BankBadResponseError("Bank authorized the payment without an authorization code")
         return response
@@ -123,7 +134,7 @@ class PaymentService:
         try:
             await self._payments.delete_pending(payment.id)
         except DBAPIError:
-            logger.exception("Could not release idempotency key of payment %s", payment.id)
+            logger.exception("idempotency_key_release_failed", payment_id=payment.id)
 
     async def _save_outcome(
         self, payment: Payment, status: PaymentStatus, authorization_code: str | None
@@ -136,17 +147,17 @@ class PaymentService:
                     await self._payments.rollback()
                 if attempt == self._save_attempts:
                     logger.exception(
-                        "Bank outcome NOT saved: payment_id=%s status=%s authorization_code=%s",
-                        payment.id,
-                        status,
-                        authorization_code,
+                        "payment_outcome_not_saved",
+                        payment_id=payment.id,
+                        status=status,
+                        authorization_code=authorization_code,
                     )
                     raise
                 logger.warning(
-                    "Saving outcome of payment %s failed (attempt %d/%d), retrying",
-                    payment.id,
-                    attempt,
-                    self._save_attempts,
+                    "payment_outcome_save_retry",
+                    payment_id=payment.id,
+                    attempt=attempt,
+                    max_attempts=self._save_attempts,
                 )
                 await asyncio.sleep(self._save_retry_delay_seconds * 2 ** (attempt - 1))
                 continue

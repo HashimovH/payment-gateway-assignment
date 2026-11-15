@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 
 import httpx
 import pytest
+import structlog
+from structlog.testing import capture_logs
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 
@@ -307,3 +309,23 @@ async def test_concurrent_requests_with_same_idempotency_key_create_one_payment(
     assert retry.status_code in (200, 201)
     assert retry.json()["id"] == payment_id
     assert retry.json()["status"] == "Authorized"
+
+
+# --- logging ------------------------------------------------------------------------
+
+
+async def test_payment_logs_carry_request_context_without_card_data(client, api_key):
+    payload = payment_payload()
+
+    with capture_logs(processors=[structlog.contextvars.merge_contextvars]) as logs:
+        response = await create_payment(client, api_key, payload)
+
+    processed, completed = (
+        next(e for e in logs if e["event"] == name)
+        for name in ("payment_processed", "request_completed")
+    )
+    assert str(processed["payment_id"]) == response.json()["id"]
+    assert processed["request_id"] == response.headers["X-Request-ID"]
+    assert processed["merchant_id"] == completed["merchant_id"]
+    assert completed["status_code"] == 201
+    assert payload["card_number"] not in str(logs)

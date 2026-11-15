@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.exc import OperationalError
+from structlog.testing import capture_logs
 
 from payment_gateway_api.clients.bank import BankPaymentResponse
 from payment_gateway_api.clients.exceptions import (
@@ -268,16 +269,17 @@ async def test_outcome_save_is_retried_after_transient_db_failure():
     assert bank.calls == 1
 
 
-async def test_outcome_save_gives_up_and_logs_audit_record(caplog):
+async def test_outcome_save_gives_up_and_logs_audit_record():
     repo, bank = FakePaymentRepository(set_outcome_failures=99), FakeBank()
 
-    with pytest.raises(OperationalError):
+    with capture_logs() as logs, pytest.raises(OperationalError):
         await make_service(repo, bank).process_payment(make_request(), MERCHANT_ID, KEY)
 
     assert repo.set_outcome_calls == 3
     assert bank.calls == 1
     assert repo.rows[MERCHANT_ID, KEY].status is PaymentStatus.PENDING
-    audit = [r for r in caplog.records if "Bank outcome NOT saved" in r.getMessage()]
+    audit = [e for e in logs if e["event"] == "payment_outcome_not_saved"]
     assert len(audit) == 1
-    assert "auth-123" in audit[0].getMessage()
-    assert "2222405343248877" not in caplog.text
+    assert audit[0]["authorization_code"] == "auth-123"
+    assert audit[0]["status"] is PaymentStatus.AUTHORIZED
+    assert "2222405343248877" not in str(logs)
