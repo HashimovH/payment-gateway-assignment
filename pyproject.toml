@@ -42,6 +42,12 @@ select = [
     "SIM",     # simplify
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: needs the test database and bank simulator (make test-db-up)",
+]
+
 [tool.coverage.run]
 source = ["payment_gateway_api"]
 branch = true

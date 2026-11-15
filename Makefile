@@ -7,12 +7,26 @@ run:
 	@poetry run python main.py
 
 .PHONY: test
-test:
+test: test-db-up
 	@poetry run python -m pytest -vv --cov --cov-report=term-missing
 
 .PHONY: test-unit
 test-unit:
 	@poetry run python -m pytest tests/unit --cov --cov-report=term-missing
+
+# Integration tests need the test database (:5433) and the bank simulator (:8080).
+.PHONY: test-integration
+test-integration: test-db-up
+	@poetry run python -m pytest tests/integration -vv --cov --cov-report=term-missing
+
+.PHONY: test-db-up
+test-db-up:
+	@docker compose up -d --wait test_db bank_simulator
+
+# Data lives in tmpfs, so removing the container wipes it.
+.PHONY: test-db-down
+test-db-down:
+	@docker compose rm --stop --force test_db
 
 .PHONY: lint
 lint:
