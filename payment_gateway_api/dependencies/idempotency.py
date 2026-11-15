@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header
 from pydantic import StringConstraints
 
 IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
@@ -17,7 +17,7 @@ async def require_idempotency_key(
             alias=IDEMPOTENCY_KEY_HEADER,
             description="Unique key per payment attempt; retries must reuse it.",
         ),
-    ] = None,
+    ],
 ) -> str:
     return key
 
