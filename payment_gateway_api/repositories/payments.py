@@ -15,8 +15,13 @@ class PaymentRepository(BaseRepository[Payment]):
             select(Payment).where(Payment.merchant_id == merchant_id, Payment.idempotency_key == key)
         )
 
-    async def get_by_id(self, payment_id: uuid.UUID) -> Payment | None:
+    async def get_by_id_for_merchant(
+        self, payment_id: uuid.UUID, merchant_id: uuid.UUID
+    ) -> Payment | None:
         return await self._session.scalar(
-            select(Payment).where(Payment.id == payment_id)
+            select(Payment).where(
+                Payment.id == payment_id,
+                Payment.merchant_id == merchant_id,
+            )
         )
         
