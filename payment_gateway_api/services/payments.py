@@ -1,13 +1,8 @@
 import uuid
 
+from payment_gateway_api.exceptions import PaymentNotFoundError
 from payment_gateway_api.repositories.payments import PaymentRepository
 from payment_gateway_api.schemas.payment_request import PaymentResponse
-
-
-class PaymentNotFoundError(Exception):
-    def __init__(self, payment_id: uuid.UUID) -> None:
-        self.payment_id = payment_id
-        super().__init__(f"Payment {payment_id} not found")
 
 
 class PaymentService:
@@ -19,5 +14,5 @@ class PaymentService:
     ) -> PaymentResponse:
         payment = await self._payments.get_by_id_for_merchant(payment_id, merchant_id)
         if payment is None:
-            raise PaymentNotFoundError(payment_id)
+            raise PaymentNotFoundError(details={"payment_id": str(payment_id)})
         return PaymentResponse.model_validate(payment)

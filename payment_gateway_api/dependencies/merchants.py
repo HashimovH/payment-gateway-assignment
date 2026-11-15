@@ -1,11 +1,12 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from payment_gateway_api.auth import hash_api_key
 from payment_gateway_api.db import get_db_session
+from payment_gateway_api.exceptions import UnauthorizedError
 from payment_gateway_api.models.merchant import Merchant
 from payment_gateway_api.repositories.merchants import MerchantRepository
 
@@ -28,11 +29,7 @@ async def get_current_merchant(
         else None
     )
     if merchant is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing API key",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise UnauthorizedError()
     return merchant
 
 
