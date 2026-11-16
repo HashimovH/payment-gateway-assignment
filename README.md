@@ -108,22 +108,6 @@ plans). The simulator has no endpoint to look up a payment, so such a job could 
 the bank did. The payment id is already sent to the bank as the `Idempotency-Key`, so a real
 bank's lookup can find it by that reference.
 
-### Trade-offs
-
-- **The bank is called inside the request.** The merchant gets the outcome immediately, and the
-  card number and CVV never have to be stored or queued. Processing payments in a background
-  worker would need them in a queue (PCI scope), and an at-least-once queue could authorize a card
-  twice unless the bank deduplicates retries. Worth revisiting once the bank supports idempotency
-  keys and card data is tokenized (Future plans).
-- **Idempotency lives in Postgres, not Redis.** The claim and the outcome are in the same durable
-  store, a unique constraint makes the claim atomic, and there is no lock TTL that can expire
-  while the bank is still answering. Redis would add a service whose failover can lose the lock.
-- **A "not processed" failure deletes the `Pending` record** instead of marking it failed, so the
-  merchant can retry with the same key. The cost is no stored record of the failed attempt; the
-  logs keep it.
-- **A retry of a `Pending` payment returns it with `202`** rather than `409`, so the merchant gets
-  the payment id to poll instead of a promise to retry that nothing would fulfil.
-
 ## Future plans
 
 In priority order:
@@ -140,7 +124,7 @@ In priority order:
 5. **A switch for bank outages**: turn payments to a bank off with one change and publish it on a
    status page, so new payments fail fast with a clear error instead of waiting for timeouts.
 6. **Asynchronous processing** with a transactional outbox and merchant webhooks, once the bank
-   deduplicates retries and card data is tokenized (see Trade-offs).
+   deduplicates retries and card data is tokenized.
 
 ## AI Usage
 
