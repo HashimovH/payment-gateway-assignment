@@ -75,11 +75,18 @@ Bank failures are split by whether the bank may have processed the payment:
 If the bank call succeeds but the final update fails, the payment also stays `Pending` instead of
 being lost. The same happens if deleting the `Pending` record fails after a "not processed" bank
 error: the request returns `202` rather than telling the merchant to retry with a key that is
-still taken. A background reconciliation job would then check those records against the bank.
+still taken.
+
+**Payments left `Pending`** stay `Pending` until a reconciliation job settles them (see Future
+plans). The simulator has no endpoint to look up a payment, so such a job could not confirm what
+the bank did. The payment id is already sent to the bank as the `Idempotency-Key`, so a real
+bank's lookup can find it by that reference.
 
 ## Future plans
 
-1. Background job setup, including the reconciliation job for `Pending` payments.
+1. Background job setup, including the reconciliation job for `Pending` payments: look each one
+   up at the bank by its payment id, record the outcome with the same `Pending`-only update as the
+   request, and alert on payments that can't be confirmed.
 2. Kubernetes Helm charts for the API, cron jobs, and an init container that runs migrations.
 3. A readiness check that queries the database, and configurable connection pool sizes.
 4. Metrics and tracing with Prometheus and Grafana, starting with the four golden signals
