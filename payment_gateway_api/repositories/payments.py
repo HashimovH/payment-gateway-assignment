@@ -10,6 +10,8 @@ from payment_gateway_api.repositories.base import BaseRepository
 
 IDEMPOTENCY_CONSTRAINT = "uq_payments_merchant_id_idempotency_key"
 
+_FRESH = {"populate_existing": True}
+
 
 class PaymentRepository(BaseRepository[Payment]):
     async def get_by_idempotency_key(
@@ -18,7 +20,8 @@ class PaymentRepository(BaseRepository[Payment]):
         return await self._session.scalar(
             select(Payment).where(
                 Payment.merchant_id == merchant_id, Payment.idempotency_key == key
-            )
+            ),
+            execution_options=_FRESH,
         )
 
     async def get_by_id_for_merchant(
@@ -28,7 +31,8 @@ class PaymentRepository(BaseRepository[Payment]):
             select(Payment).where(
                 Payment.id == payment_id,
                 Payment.merchant_id == merchant_id,
-            )
+            ),
+            execution_options=_FRESH,
         )
 
     async def create_pending_if_absent(
@@ -73,9 +77,13 @@ class PaymentRepository(BaseRepository[Payment]):
         payment = await self._session.scalar(
             update(Payment)
             .where(Payment.id == payment_id, Payment.status == PaymentStatus.PENDING)
-            .values(status=status, authorization_code=authorization_code, updated_at=func.now())
-            .returning(Payment)
-            .execution_options(populate_existing=True)
+            .values(
+                status=status,
+                authorization_code=authorization_code,
+                updated_at=func.now(),
+            )
+            .returning(Payment),
+            execution_options=_FRESH,
         )
         await self._session.commit()
         return payment

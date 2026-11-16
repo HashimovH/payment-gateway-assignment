@@ -1,3 +1,4 @@
+import uuid
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
@@ -47,9 +48,11 @@ class BankPaymentResponse(BaseModel):
 class BankClient(BaseHTTPClient):
     service_name = "acquiring bank"
 
-    async def authorize_payment(self, request: PaymentRequest) -> BankPaymentResponse:
+    async def authorize_payment(
+        self, request: PaymentRequest, *, reference: uuid.UUID
+    ) -> BankPaymentResponse:
         payload = BankPaymentRequest.from_payment_request(request).model_dump()
-        body = await self._post("/payments", payload)
+        body = await self._post("/payments", payload, headers={"Idempotency-Key": str(reference)})
 
         try:
             return BankPaymentResponse.model_validate(body)

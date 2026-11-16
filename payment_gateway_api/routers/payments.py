@@ -26,6 +26,7 @@ async def process_payment(
     payment = await service.process_payment(data, merchant.id, idempotency_key)
     if payment.status is PaymentStatus.PENDING:
         response.status_code = status.HTTP_202_ACCEPTED
+        response.headers["Location"] = f"{router.prefix}/{payment.id}"
     return payment
 
 

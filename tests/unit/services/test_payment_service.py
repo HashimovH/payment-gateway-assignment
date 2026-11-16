@@ -51,11 +51,12 @@ def db_error() -> OperationalError:
 
 
 class FakePaymentRepository:
-    def __init__(self, set_outcome_failures: int = 0) -> None:
+    def __init__(self, set_outcome_failures: int = 0, delete_fails: bool = False) -> None:
         self.rows: dict[tuple[uuid.UUID, str], Payment] = {}
         self.set_outcome_calls = 0
         self.rollbacks = 0
         self._set_outcome_failures = set_outcome_failures
+        self._delete_fails = delete_fails
 
     async def create_pending_if_absent(self, *, merchant_id, idempotency_key, **values):
         if (merchant_id, idempotency_key) in self.rows:
@@ -92,6 +93,8 @@ class FakePaymentRepository:
         return payment
 
     async def delete_pending(self, payment_id):
+        if self._delete_fails:
+            raise db_error()
         self.rows = {
             k: p
             for k, p in self.rows.items()
@@ -109,9 +112,11 @@ class FakeBank:
             authorized=True, authorization_code="auth-123"
         )
         self._error = error
+        self.references: list[uuid.UUID] = []
 
-    async def authorize_payment(self, _request):
+    async def authorize_payment(self, _request, *, reference):
         self.calls += 1
+        self.references.append(reference)
         if self._error:
             raise self._error
         return self._response
@@ -205,15 +210,46 @@ async def test_unknown_bank_outcome_keeps_payment_pending(bank):
     assert repo.set_outcome_calls == 0
 
 
-async def test_retry_after_unknown_bank_outcome_does_not_charge_again():
+async def test_retry_after_unknown_bank_outcome_returns_pending_without_charging_again():
     repo = FakePaymentRepository()
     bank = FakeBank(error=ExternalServiceOutcomeUnknownError("bank", "timed out"))
     service = make_service(repo, bank)
-    await service.process_payment(make_request(), MERCHANT_ID, KEY)
+    first = await service.process_payment(make_request(), MERCHANT_ID, KEY)
 
-    with pytest.raises(PaymentInProgressError):
-        await service.process_payment(make_request(), MERCHANT_ID, KEY)
+    retry = await service.process_payment(make_request(), MERCHANT_ID, KEY)
+
+    assert retry == first
+    assert retry.status is PaymentStatus.PENDING
     assert bank.calls == 1
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ExternalServiceUnavailableError("bank", "returned 503", 503),
+        ExternalServiceBadResponseError("bank", "returned 400", 400),
+    ],
+)
+async def test_failed_key_release_keeps_payment_pending(error):
+    repo = FakePaymentRepository(delete_fails=True)
+
+    with capture_logs() as logs:
+        response = await make_service(repo, FakeBank(error=error)).process_payment(
+            make_request(), MERCHANT_ID, KEY
+        )
+
+    assert response.status is PaymentStatus.PENDING
+    assert repo.rows[MERCHANT_ID, KEY].status is PaymentStatus.PENDING
+    assert repo.rollbacks == 1
+    assert any(e["event"] == "idempotency_key_release_failed" for e in logs)
+
+
+async def test_bank_receives_the_payment_id_as_reference():
+    repo, bank = FakePaymentRepository(), FakeBank()
+
+    response = await make_service(repo, bank).process_payment(make_request(), MERCHANT_ID, KEY)
+
+    assert bank.references == [response.id]
 
 
 # --- idempotency --------------------------------------------------------------------
@@ -240,7 +276,7 @@ async def test_reused_key_with_different_request_is_rejected():
     assert bank.calls == 1
 
 
-async def test_key_of_pending_payment_is_in_progress():
+async def test_key_of_pending_payment_returns_it_as_pending():
     repo, bank = FakePaymentRepository(), FakeBank()
     request = make_request()
     await repo.create_pending_if_absent(
@@ -254,9 +290,21 @@ async def test_key_of_pending_payment_is_in_progress():
         amount=1050,
     )
 
-    with pytest.raises(PaymentInProgressError):
-        await make_service(repo, bank).process_payment(request, MERCHANT_ID, KEY)
+    response = await make_service(repo, bank).process_payment(request, MERCHANT_ID, KEY)
+
+    assert response.status is PaymentStatus.PENDING
     assert bank.calls == 0
+
+
+async def test_key_released_between_insert_and_read_is_in_progress():
+    class VanishingRowRepository(FakePaymentRepository):
+        async def create_pending_if_absent(self, **_values):
+            return None
+
+    with pytest.raises(PaymentInProgressError):
+        await make_service(VanishingRowRepository(), FakeBank()).process_payment(
+            make_request(), MERCHANT_ID, KEY
+        )
 
 
 async def test_get_pending_payment_returns_it_as_pending():
