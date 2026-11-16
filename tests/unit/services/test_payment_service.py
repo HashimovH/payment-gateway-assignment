@@ -8,6 +8,7 @@ from structlog.testing import capture_logs
 from payment_gateway_api.clients.bank import BankPaymentResponse
 from payment_gateway_api.clients.exceptions import (
     ExternalServiceBadResponseError,
+    ExternalServiceOutcomeUnknownError,
     ExternalServiceUnavailableError,
 )
 from payment_gateway_api.enums import Currency, PaymentStatus
@@ -169,12 +170,11 @@ async def test_declined_payment_is_stored_without_code():
     ("error", "expected"),
     [
         (ExternalServiceUnavailableError("bank", "returned 503", 503), BankUnavailableError),
-        (ExternalServiceUnavailableError("bank", "timed out"), BankUnavailableError),
+        (ExternalServiceUnavailableError("bank", "connection refused"), BankUnavailableError),
         (ExternalServiceBadResponseError("bank", "returned 400", 400), BankBadResponseError),
-        (ExternalServiceBadResponseError("bank", "not JSON", 200), BankBadResponseError),
     ],
 )
-async def test_bank_failure_releases_the_key(error, expected):
+async def test_bank_failure_before_processing_releases_the_key(error, expected):
     repo = FakePaymentRepository()
 
     with pytest.raises(expected):
@@ -185,14 +185,35 @@ async def test_bank_failure_releases_the_key(error, expected):
     assert repo.rows == {}
 
 
-async def test_authorized_without_code_is_a_bad_response():
+@pytest.mark.parametrize(
+    "bank",
+    [
+        FakeBank(error=ExternalServiceOutcomeUnknownError("bank", "timed out")),
+        FakeBank(error=ExternalServiceOutcomeUnknownError("bank", "returned 500", 500)),
+        FakeBank(error=ExternalServiceOutcomeUnknownError("bank", "not JSON", 200)),
+        FakeBank(BankPaymentResponse(authorized=True, authorization_code="")),
+    ],
+    ids=["timeout", "server-error", "unreadable-body", "authorized-without-code"],
+)
+async def test_unknown_bank_outcome_keeps_payment_pending(bank):
     repo = FakePaymentRepository()
-    bank = FakeBank(BankPaymentResponse(authorized=True, authorization_code=""))
 
-    with pytest.raises(BankBadResponseError):
-        await make_service(repo, bank).process_payment(make_request(), MERCHANT_ID, KEY)
+    response = await make_service(repo, bank).process_payment(make_request(), MERCHANT_ID, KEY)
 
-    assert repo.rows == {}
+    assert response.status is PaymentStatus.PENDING
+    assert repo.rows[MERCHANT_ID, KEY].status is PaymentStatus.PENDING
+    assert repo.set_outcome_calls == 0
+
+
+async def test_retry_after_unknown_bank_outcome_does_not_charge_again():
+    repo = FakePaymentRepository()
+    bank = FakeBank(error=ExternalServiceOutcomeUnknownError("bank", "timed out"))
+    service = make_service(repo, bank)
+    await service.process_payment(make_request(), MERCHANT_ID, KEY)
+
+    with pytest.raises(PaymentInProgressError):
+        await service.process_payment(make_request(), MERCHANT_ID, KEY)
+    assert bank.calls == 1
 
 
 # --- idempotency --------------------------------------------------------------------
@@ -238,7 +259,7 @@ async def test_key_of_pending_payment_is_in_progress():
     assert bank.calls == 0
 
 
-async def test_get_pending_payment_is_in_progress():
+async def test_get_pending_payment_returns_it_as_pending():
     repo = FakePaymentRepository()
     payment = await repo.create_pending_if_absent(
         merchant_id=MERCHANT_ID,
@@ -251,8 +272,10 @@ async def test_get_pending_payment_is_in_progress():
         amount=1050,
     )
 
-    with pytest.raises(PaymentInProgressError):
-        await make_service(repo, FakeBank()).get_payment(payment.id, MERCHANT_ID)
+    response = await make_service(repo, FakeBank()).get_payment(payment.id, MERCHANT_ID)
+
+    assert response.id == payment.id
+    assert response.status is PaymentStatus.PENDING
 
 
 # --- saving the bank outcome --------------------------------------------------------

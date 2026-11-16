@@ -188,9 +188,11 @@ async def test_missing_idempotency_key_is_rejected(client, api_key):
         ({"expiry_month": 0}, "expiry_month"),
         ({"expiry_month": 13}, "expiry_month"),
         ({"expiry_month": 1, "expiry_year": NEXT_YEAR - 2}, "expiry_year"),  # expired
+        ({"expiry_year": 99_999}, "expiry_year"),  # too large for the column
         ({"currency": "JPY"}, "currency"),
         ({"amount": 0}, "amount"),
         ({"amount": -100}, "amount"),
+        ({"amount": 10**20}, "amount"),  # too large for the column
         ({"amount": "1050"}, "amount"),  # string, not integer
         ({"cvv": "12"}, "cvv"),
         ({"cvv": "12345"}, "cvv"),

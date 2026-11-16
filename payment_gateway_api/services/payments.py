@@ -10,6 +10,7 @@ from sqlalchemy.exc import DBAPIError
 from payment_gateway_api.clients.bank import BankClient, BankPaymentResponse
 from payment_gateway_api.clients.exceptions import (
     ExternalServiceBadResponseError,
+    ExternalServiceOutcomeUnknownError,
     ExternalServiceUnavailableError,
 )
 from payment_gateway_api.dependencies.idempotency import IdempotencyKeyValue
@@ -62,8 +63,6 @@ class PaymentService:
         payment = await self._payments.get_by_id_for_merchant(payment_id, merchant_id)
         if payment is None:
             raise PaymentNotFoundError(details={"payment_id": str(payment_id)})
-        if payment.status is PaymentStatus.PENDING:
-            raise PaymentInProgressError(details={"payment_id": str(payment_id)})
         return PaymentResponse.model_validate(payment)
 
     async def process_payment(
@@ -87,6 +86,9 @@ class PaymentService:
             return await self._replay(merchant_id, idempotency_key, fingerprint)
 
         bank_response = await self._authorize(payment, data)
+        if bank_response is None:
+            return PaymentResponse.model_validate(payment)
+
         status = PaymentStatus.AUTHORIZED if bank_response.authorized else PaymentStatus.DECLINED
         code = bank_response.authorization_code if bank_response.authorized else None
         saved = await self._save_outcome(payment, status, code)
@@ -112,7 +114,9 @@ class PaymentService:
         logger.info("payment_replayed", payment_id=existing.id, status=existing.status)
         return PaymentResponse.model_validate(existing)
 
-    async def _authorize(self, payment: Payment, data: PaymentRequest) -> BankPaymentResponse:
+    async def _authorize(
+        self, payment: Payment, data: PaymentRequest
+    ) -> BankPaymentResponse | None:
         try:
             response = await self._bank_client.authorize_payment(data)
         except ExternalServiceUnavailableError as exc:
@@ -123,11 +127,13 @@ class PaymentService:
             logger.error("bank_bad_response", payment_id=payment.id, error=str(exc))
             await self._release(payment)
             raise BankBadResponseError() from exc
+        except ExternalServiceOutcomeUnknownError as exc:
+            logger.error("bank_outcome_unknown", payment_id=payment.id, error=str(exc))
+            return None
 
         if response.authorized and not response.authorization_code:
             logger.error("bank_authorized_without_code", payment_id=payment.id)
-            await self._release(payment)
-            raise BankBadResponseError("Bank authorized the payment without an authorization code")
+            return None
         return response
 
     async def _release(self, payment: Payment) -> None:

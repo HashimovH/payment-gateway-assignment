@@ -3,7 +3,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from payment_gateway_api.clients.base import BaseHTTPClient
-from payment_gateway_api.clients.exceptions import ExternalServiceBadResponseError
+from payment_gateway_api.clients.exceptions import ExternalServiceOutcomeUnknownError
 from payment_gateway_api.schemas.payment_request import PaymentRequest
 
 
@@ -54,6 +54,6 @@ class BankClient(BaseHTTPClient):
         try:
             return BankPaymentResponse.model_validate(body)
         except ValidationError as exc:
-            raise ExternalServiceBadResponseError(
+            raise ExternalServiceOutcomeUnknownError(
                 self.service_name, "unexpected response body"
             ) from exc

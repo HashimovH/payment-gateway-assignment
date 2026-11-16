@@ -4,15 +4,20 @@ import httpx
 
 from payment_gateway_api.clients.exceptions import (
     ExternalServiceBadResponseError,
+    ExternalServiceOutcomeUnknownError,
     ExternalServiceUnavailableError,
 )
+
+# The connection was never established, so the service never saw the request.
+_NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 
 
 class BaseHTTPClient:
     """Shared httpx plumbing for external services.
 
-    Turns httpx/HTTP failures into ExternalService* errors. No automatic
-    retries: retrying a payment could charge the shopper twice.
+    Turns httpx/HTTP failures into ExternalService* errors, split by whether the
+    request may have been processed. No automatic retries: retrying a payment
+    could charge the shopper twice.
     """
 
     service_name: ClassVar[str] = "external service"
@@ -37,13 +42,21 @@ class BaseHTTPClient:
     async def _post(self, path: str, payload: dict[str, Any]) -> Any:
         try:
             response = await self._client.post(path, json=payload)
-        except httpx.TransportError as exc:  # timeouts, connection errors
+        except _NOT_SENT_ERRORS as exc:
             raise ExternalServiceUnavailableError(
+                self.service_name, str(exc) or "connection failed"
+            ) from exc
+        except httpx.TransportError as exc:
+            raise ExternalServiceOutcomeUnknownError(
                 self.service_name, str(exc) or "no response"
             ) from exc
 
-        if response.is_server_error:
+        if response.status_code == httpx.codes.SERVICE_UNAVAILABLE:
             raise ExternalServiceUnavailableError(
+                self.service_name, f"returned {response.status_code}", response.status_code
+            )
+        if response.is_server_error:
+            raise ExternalServiceOutcomeUnknownError(
                 self.service_name, f"returned {response.status_code}", response.status_code
             )
         if not response.is_success:
@@ -54,6 +67,6 @@ class BaseHTTPClient:
         try:
             return response.json()
         except ValueError as exc:
-            raise ExternalServiceBadResponseError(
+            raise ExternalServiceOutcomeUnknownError(
                 self.service_name, "response is not valid JSON", response.status_code
             ) from exc

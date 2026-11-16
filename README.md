@@ -59,8 +59,17 @@ A payment request goes through these steps:
 3. **Bank call**: the request is sent to the acquiring bank, and the record is updated to
    `Authorized` or `Declined`.
 
-If the bank call succeeds but the final update fails, the payment stays `Pending` instead of being
-lost. A background reconciliation job would then check those records against the bank.
+Bank failures are split by whether the bank may have processed the payment:
+
+- **Not processed** (connection refused, `503`, `4xx`): the `Pending` record is deleted, so the
+  merchant can safely retry with the same `Idempotency-Key`.
+- **Outcome unknown** (timeout after the request was sent, other `5xx`, unreadable response): the
+  payment stays `Pending` and is returned with `202 Accepted`. Releasing it would let a retry
+  charge the card twice. Retries with the same key get `409` until the payment is settled, and
+  `GET /payments/{id}` shows it as `Pending`.
+
+If the bank call succeeds but the final update fails, the payment also stays `Pending` instead of
+being lost. A background reconciliation job would then check those records against the bank.
 
 ## Future plans
 
@@ -79,9 +88,6 @@ lost. A background reconciliation job would then check those records against the
 8. Rate limiting per merchant, starting with `POST /payments`.
 9. `CLAUDE.md` and `AGENTS.md` files that describe the project's conventions and workflows for
    AI coding agents.
-10. Safer handling of bank timeouts. A timeout doesn't tell us whether the bank authorized the
-    payment, so the payment should stay `Pending` for the reconciliation job instead of being
-    released for a retry.
 
 ## AI Usage
 

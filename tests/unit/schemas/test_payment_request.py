@@ -86,8 +86,8 @@ def test_card_that_expired_last_year_is_rejected():
         PaymentRequest.model_validate(valid_payload(expiry_month=12, expiry_year=NOW.year - 1))
 
 
-@pytest.mark.parametrize("year", ["2030", 2030.0])
-def test_expiry_year_rejects_non_integers(year):
+@pytest.mark.parametrize("year", ["2030", 2030.0, 10_000, 99_999])
+def test_expiry_year_rejects_non_integers_and_years_beyond_four_digits(year):
     assert_invalid("expiry_year", expiry_year=year)
 
 
@@ -101,13 +101,13 @@ def test_unsupported_or_malformed_currency_is_rejected(currency):
     assert_invalid("currency", currency=currency)
 
 
-@pytest.mark.parametrize("amount", [1, 1050, 10**12])
-def test_amount_accepts_positive_integers(amount):
+@pytest.mark.parametrize("amount", [1, 1050, 10**12 - 1])
+def test_amount_accepts_positive_integers_up_to_12_digits(amount):
     assert PaymentRequest.model_validate(valid_payload(amount=amount)).amount == amount
 
 
-@pytest.mark.parametrize("amount", [0, -1, 10.5, 10.0, "1050", True])
-def test_amount_rejects_non_positive_and_non_integers(amount):
+@pytest.mark.parametrize("amount", [0, -1, 10.5, 10.0, "1050", True, 10**12, 10**20])
+def test_amount_rejects_out_of_range_and_non_integers(amount):
     assert_invalid("amount", amount=amount)
 
 
@@ -157,12 +157,12 @@ def test_payment_response_serializes_to_api_shape():
     assert response.model_dump(mode="json") == valid_response(card_number_last_four="0123")
 
 
-@pytest.mark.parametrize("status", ["Authorized", "Declined"])
-def test_payment_response_accepts_bank_outcomes(status):
+@pytest.mark.parametrize("status", ["Authorized", "Declined", "Pending"])
+def test_payment_response_accepts_payment_statuses(status):
     assert PaymentResponse.model_validate(valid_response(status=status)).status == status
 
 
-@pytest.mark.parametrize("status", ["Rejected", "authorized", "Pending"])
+@pytest.mark.parametrize("status", ["Rejected", "authorized", "pending"])
 def test_payment_response_rejects_other_statuses(status):
     with pytest.raises(ValidationError):
         PaymentResponse.model_validate(valid_response(status=status))

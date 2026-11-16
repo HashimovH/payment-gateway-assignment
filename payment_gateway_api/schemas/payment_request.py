@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import Field, StrictInt, ValidationInfo, field_validator
@@ -8,14 +7,16 @@ from payment_gateway_api.enums import Currency, PaymentStatus
 from payment_gateway_api.schemas.base import SchemaBase
 
 DIGITS_ONLY = r"^[0-9]+$"
+MAX_AMOUNT = 999_999_999_999
+MAX_EXPIRY_YEAR = 9999
 
 
 class PaymentRequest(SchemaBase):
     card_number: str = Field(min_length=14, max_length=19, pattern=DIGITS_ONLY, repr=False)
     expiry_month: StrictInt = Field(ge=1, le=12)
-    expiry_year: StrictInt
+    expiry_year: StrictInt = Field(le=MAX_EXPIRY_YEAR)
     currency: Currency
-    amount: StrictInt = Field(gt=0)
+    amount: StrictInt = Field(gt=0, le=MAX_AMOUNT)
     cvv: str = Field(min_length=3, max_length=4, pattern=DIGITS_ONLY, repr=False)
 
     @field_validator("expiry_year")
@@ -34,7 +35,7 @@ class PaymentRequest(SchemaBase):
 
 class PaymentResponse(SchemaBase):
     id: UUID
-    status: Literal[PaymentStatus.AUTHORIZED, PaymentStatus.DECLINED]
+    status: PaymentStatus
     card_number_last_four: str = Field(min_length=4, max_length=4, pattern=DIGITS_ONLY)
     expiry_month: int
     expiry_year: int
