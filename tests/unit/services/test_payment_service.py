@@ -205,14 +205,16 @@ async def test_unknown_bank_outcome_keeps_payment_pending(bank):
     assert repo.set_outcome_calls == 0
 
 
-async def test_retry_after_unknown_bank_outcome_does_not_charge_again():
+async def test_retry_after_unknown_bank_outcome_returns_pending_without_charging_again():
     repo = FakePaymentRepository()
     bank = FakeBank(error=ExternalServiceOutcomeUnknownError("bank", "timed out"))
     service = make_service(repo, bank)
-    await service.process_payment(make_request(), MERCHANT_ID, KEY)
+    first = await service.process_payment(make_request(), MERCHANT_ID, KEY)
 
-    with pytest.raises(PaymentInProgressError):
-        await service.process_payment(make_request(), MERCHANT_ID, KEY)
+    retry = await service.process_payment(make_request(), MERCHANT_ID, KEY)
+
+    assert retry == first
+    assert retry.status is PaymentStatus.PENDING
     assert bank.calls == 1
 
 
@@ -240,7 +242,7 @@ async def test_reused_key_with_different_request_is_rejected():
     assert bank.calls == 1
 
 
-async def test_key_of_pending_payment_is_in_progress():
+async def test_key_of_pending_payment_returns_it_as_pending():
     repo, bank = FakePaymentRepository(), FakeBank()
     request = make_request()
     await repo.create_pending_if_absent(
@@ -254,9 +256,21 @@ async def test_key_of_pending_payment_is_in_progress():
         amount=1050,
     )
 
-    with pytest.raises(PaymentInProgressError):
-        await make_service(repo, bank).process_payment(request, MERCHANT_ID, KEY)
+    response = await make_service(repo, bank).process_payment(request, MERCHANT_ID, KEY)
+
+    assert response.status is PaymentStatus.PENDING
     assert bank.calls == 0
+
+
+async def test_key_released_between_insert_and_read_is_in_progress():
+    class VanishingRowRepository(FakePaymentRepository):
+        async def create_pending_if_absent(self, **_values):
+            return None
+
+    with pytest.raises(PaymentInProgressError):
+        await make_service(VanishingRowRepository(), FakeBank()).process_payment(
+            make_request(), MERCHANT_ID, KEY
+        )
 
 
 async def test_get_pending_payment_returns_it_as_pending():

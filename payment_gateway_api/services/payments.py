@@ -109,8 +109,6 @@ class PaymentService:
             raise PaymentInProgressError()
         if existing.request_fingerprint != fingerprint:
             raise IdempotencyKeyReusedError()
-        if existing.status is PaymentStatus.PENDING:
-            raise PaymentInProgressError(details={"payment_id": str(existing.id)})
         logger.info("payment_replayed", payment_id=existing.id, status=existing.status)
         return PaymentResponse.model_validate(existing)
 

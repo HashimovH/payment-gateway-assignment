@@ -68,9 +68,9 @@ Bank failures are split by whether the bank may have processed the payment:
 - **Not processed** (connection refused, `503`, `4xx`): the `Pending` record is deleted, so the
   merchant can safely retry with the same `Idempotency-Key`.
 - **Outcome unknown** (timeout after the request was sent, other `5xx`, unreadable response): the
-  payment stays `Pending` and is returned with `202 Accepted`. Releasing it would let a retry
-  charge the card twice. Retries with the same key get `409` until the payment is settled, and
-  `GET /payments/{id}` shows it as `Pending`.
+  payment stays `Pending` and is returned with `202 Accepted` and a `Location` header. Releasing
+  it would let a retry charge the card twice. Retries with the same key return the same `Pending`
+  payment (`202`) without calling the bank again, and `GET /payments/{id}` shows its status.
 
 If the bank call succeeds but the final update fails, the payment also stays `Pending` instead of
 being lost. A background reconciliation job would then check those records against the bank.
