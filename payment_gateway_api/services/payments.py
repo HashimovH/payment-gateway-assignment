@@ -119,11 +119,13 @@ class PaymentService:
             response = await self._bank_client.authorize_payment(data)
         except ExternalServiceUnavailableError as exc:
             logger.warning("bank_unavailable", payment_id=payment.id, error=str(exc))
-            await self._release(payment)
+            if not await self._release(payment):
+                return None
             raise BankUnavailableError() from exc
         except ExternalServiceBadResponseError as exc:
             logger.error("bank_bad_response", payment_id=payment.id, error=str(exc))
-            await self._release(payment)
+            if not await self._release(payment):
+                return None
             raise BankBadResponseError() from exc
         except ExternalServiceOutcomeUnknownError as exc:
             logger.error("bank_outcome_unknown", payment_id=payment.id, error=str(exc))
@@ -134,11 +136,15 @@ class PaymentService:
             return None
         return response
 
-    async def _release(self, payment: Payment) -> None:
+    async def _release(self, payment: Payment) -> bool:
         try:
             await self._payments.delete_pending(payment.id)
         except DBAPIError:
             logger.exception("idempotency_key_release_failed", payment_id=payment.id)
+            with contextlib.suppress(DBAPIError):
+                await self._payments.rollback()
+            return False
+        return True
 
     async def _save_outcome(
         self, payment: Payment, status: PaymentStatus, authorization_code: str | None
