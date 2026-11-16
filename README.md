@@ -73,7 +73,9 @@ Bank failures are split by whether the bank may have processed the payment:
   payment (`202`) without calling the bank again, and `GET /payments/{id}` shows its status.
 
 If the bank call succeeds but the final update fails, the payment also stays `Pending` instead of
-being lost. A background reconciliation job would then check those records against the bank.
+being lost. The same happens if deleting the `Pending` record fails after a "not processed" bank
+error: the request returns `202` rather than telling the merchant to retry with a key that is
+still taken. A background reconciliation job would then check those records against the bank.
 
 ## Future plans
 

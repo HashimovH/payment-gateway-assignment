@@ -51,11 +51,12 @@ def db_error() -> OperationalError:
 
 
 class FakePaymentRepository:
-    def __init__(self, set_outcome_failures: int = 0) -> None:
+    def __init__(self, set_outcome_failures: int = 0, delete_fails: bool = False) -> None:
         self.rows: dict[tuple[uuid.UUID, str], Payment] = {}
         self.set_outcome_calls = 0
         self.rollbacks = 0
         self._set_outcome_failures = set_outcome_failures
+        self._delete_fails = delete_fails
 
     async def create_pending_if_absent(self, *, merchant_id, idempotency_key, **values):
         if (merchant_id, idempotency_key) in self.rows:
@@ -92,6 +93,8 @@ class FakePaymentRepository:
         return payment
 
     async def delete_pending(self, payment_id):
+        if self._delete_fails:
+            raise db_error()
         self.rows = {
             k: p
             for k, p in self.rows.items()
@@ -183,6 +186,27 @@ async def test_bank_failure_before_processing_releases_the_key(error, expected):
         )
 
     assert repo.rows == {}
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ExternalServiceUnavailableError("bank", "returned 503", 503),
+        ExternalServiceBadResponseError("bank", "returned 400", 400),
+    ],
+)
+async def test_failed_key_release_keeps_payment_pending(error):
+    repo = FakePaymentRepository(delete_fails=True)
+
+    with capture_logs() as logs:
+        response = await make_service(repo, FakeBank(error=error)).process_payment(
+            make_request(), MERCHANT_ID, KEY
+        )
+
+    assert response.status is PaymentStatus.PENDING
+    assert repo.rows[MERCHANT_ID, KEY].status is PaymentStatus.PENDING
+    assert repo.rollbacks == 1
+    assert any(e["event"] == "idempotency_key_release_failed" for e in logs)
 
 
 @pytest.mark.parametrize(
