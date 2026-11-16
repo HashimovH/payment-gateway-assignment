@@ -51,3 +51,5 @@ lost. A background reconciliation job would then check those records against the
    hand-written FastAPI dependencies, with explicit app, request and session scopes.
 6. A central router setup as the number of routers grows: one versioned API router (e.g. `/v1`)
    that includes the feature routers, so `app.py` only mounts a single router.
+7. At the moment, I don't like the way of handling process like this. Plan would be using outbox and webhooks mechanism to notify users about the transaction also, asyncronously check the status of payments, apply retries if needed. 
+8. Adding rate limiter is an essential in this API. 
