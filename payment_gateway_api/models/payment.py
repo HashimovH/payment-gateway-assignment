@@ -1,3 +1,4 @@
+import enum
 import uuid
 
 from sqlalchemy import (
@@ -16,9 +17,9 @@ from payment_gateway_api.enums import Currency, PaymentStatus
 from payment_gateway_api.models.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 
-def _enum_values(enum_cls: type) -> list[str]:
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
     # Store the enum *values* ("Authorized") rather than member names ("AUTHORIZED").
-    return [member.value for member in enum_cls]
+    return [str(member.value) for member in enum_cls]
 
 
 class Payment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
