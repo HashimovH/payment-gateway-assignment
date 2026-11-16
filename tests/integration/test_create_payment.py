@@ -86,7 +86,7 @@ async def test_retry_with_same_idempotency_key_returns_original_payment(client, 
     retry = await create_payment(client, api_key, payload, idempotency_key=key)
 
     assert first.status_code == 201
-    assert retry.status_code in (200, 201)
+    assert retry.status_code == 201
     assert retry.json() == first.json()
 
 
@@ -254,9 +254,9 @@ async def test_reusing_idempotency_key_with_different_body_is_rejected(client, a
 async def test_concurrent_requests_with_same_idempotency_key_create_one_payment(client, api_key):
     """N identical requests race on one Idempotency-Key.
 
-    The unique (merchant_id, idempotency_key) constraint must surface as either
-    the same payment or a 409 "still in progress", never as a 500 or as a
-    second payment.
+    The unique (merchant_id, idempotency_key) constraint must surface as the same
+    payment, either settled (201) or still pending (202), never as a 500 or as a
+    second payment. test_pending_payments.py also proves the bank is called once.
     """
     concurrency = 10
     key = str(uuid.uuid4())
@@ -267,17 +267,15 @@ async def test_concurrent_requests_with_same_idempotency_key_create_one_payment(
     )
 
     statuses = [r.status_code for r in responses]
-    assert set(statuses) <= {200, 201, 409}, statuses
-
-    succeeded = [r.json() for r in responses if r.status_code in (200, 201)]
-    assert succeeded, f"no request succeeded: {statuses}"
-    payment_ids = {body["id"] for body in succeeded}
+    assert set(statuses) <= {201, 202}, statuses
+    assert 201 in statuses, f"no request settled the payment: {statuses}"
+    payment_ids = {r.json()["id"] for r in responses}
     assert len(payment_ids) == 1, f"one key created several payments: {payment_ids}"
 
     # Once the race settles, a retry returns that same single payment.
     (payment_id,) = payment_ids
     retry = await create_payment(client, api_key, payload, key)
-    assert retry.status_code in (200, 201)
+    assert retry.status_code == 201
     assert retry.json()["id"] == payment_id
     assert retry.json()["status"] == "Authorized"
 
