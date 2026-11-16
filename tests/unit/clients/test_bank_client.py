@@ -1,3 +1,4 @@
+import uuid
 from datetime import UTC, datetime
 
 import httpx
@@ -48,7 +49,7 @@ def responding(status_code: int, **kwargs):
 async def authorize(handler) -> None:
     transport = httpx.MockTransport(handler)
     async with BankClient("http://bank", timeout=1, transport=transport) as client:
-        await client.authorize_payment(REQUEST)
+        await client.authorize_payment(REQUEST, reference=uuid.uuid4())
 
 
 @pytest.mark.parametrize(
@@ -90,7 +91,21 @@ async def test_authorized_response_is_parsed():
         responding(200, json={"authorized": True, "authorization_code": "abc"})
     )
     async with BankClient("http://bank", timeout=1, transport=transport) as client:
-        response = await client.authorize_payment(REQUEST)
+        response = await client.authorize_payment(REQUEST, reference=uuid.uuid4())
 
     assert response.authorized
     assert response.authorization_code == "abc"
+
+
+async def test_payment_id_is_sent_as_idempotency_key():
+    reference = uuid.uuid4()
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"authorized": False, "authorization_code": ""})
+
+    async with BankClient("http://bank", timeout=1, transport=httpx.MockTransport(handler)) as c:
+        await c.authorize_payment(REQUEST, reference=reference)
+
+    assert seen[0].headers["Idempotency-Key"] == str(reference)
