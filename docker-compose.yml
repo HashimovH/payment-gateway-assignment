@@ -10,6 +10,7 @@ services:
       BANK_URL: http://bank_simulator:8080
       DATABASE_URL: postgresql://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway}@postgres:5432/${POSTGRES_DB:-payment_gateway}
       TEST_BANK_URL: http://bank_simulator:8080
+      TEST_MOUNTEBANK_URL: http://bank_simulator:2525
       TEST_DATABASE_URL: postgresql://${TEST_POSTGRES_USER:-gateway}:${TEST_POSTGRES_PASSWORD:-gateway}@test_db:5432/${TEST_POSTGRES_DB:-payment_gateway_test}
     depends_on:
       postgres:
@@ -67,6 +68,7 @@ services:
     ports:
       - "2525:2525"
       - "8080:8080"
+      - "8081-8082:8081-8082"
     command: --configfile /imposters/bank_simulator.ejs --allowInjection
     volumes:
       - type: bind

@@ -41,6 +41,9 @@ select = [
     "SIM",     # simplify
 ]
 
+[tool.ruff.lint.isort]
+known-local-folder = ["api_helpers"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

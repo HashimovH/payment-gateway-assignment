@@ -7,53 +7,22 @@ outcome by the card number's last digit:
 
 import asyncio
 import uuid
-from datetime import UTC, datetime
 
-import httpx
 import pytest
 import structlog
 from structlog.testing import capture_logs
 
+from api_helpers import (
+    AUTHORIZED_CARD,
+    BANK_UNAVAILABLE_CARD,
+    DECLINED_CARD,
+    NEXT_YEAR,
+    auth_headers,
+    create_payment,
+    payment_payload,
+)
+
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
-
-AUTHORIZED_CARD = "2222405343248877"  # ends in 7
-DECLINED_CARD = "2222405343248112"  # ends in 2
-BANK_UNAVAILABLE_CARD = "2222405343248870"  # ends in 0
-
-NEXT_YEAR = datetime.now(UTC).year + 1
-
-
-def payment_payload(**overrides) -> dict:
-    payload = {
-        "card_number": AUTHORIZED_CARD,
-        "expiry_month": 4,
-        "expiry_year": NEXT_YEAR,
-        "currency": "GBP",
-        "amount": 1050,
-        "cvv": "123",
-    }
-    payload.update(overrides)
-    return payload
-
-
-def auth_headers(api_key: str, idempotency_key: str | None = None) -> dict[str, str]:
-    return {
-        "Authorization": f"Bearer {api_key}",
-        "Idempotency-Key": idempotency_key or str(uuid.uuid4()),
-    }
-
-
-async def create_payment(
-    client: httpx.AsyncClient,
-    api_key: str,
-    payload: dict | None = None,
-    idempotency_key: str | None = None,
-) -> httpx.Response:
-    return await client.post(
-        "/payments",
-        json=payload if payload is not None else payment_payload(),
-        headers=auth_headers(api_key, idempotency_key),
-    )
 
 
 def assert_matches_request(body: dict, payload: dict) -> None:
@@ -117,7 +86,7 @@ async def test_retry_with_same_idempotency_key_returns_original_payment(client, 
     retry = await create_payment(client, api_key, payload, idempotency_key=key)
 
     assert first.status_code == 201
-    assert retry.status_code in (200, 201)
+    assert retry.status_code == 201
     assert retry.json() == first.json()
 
 
@@ -285,9 +254,9 @@ async def test_reusing_idempotency_key_with_different_body_is_rejected(client, a
 async def test_concurrent_requests_with_same_idempotency_key_create_one_payment(client, api_key):
     """N identical requests race on one Idempotency-Key.
 
-    The unique (merchant_id, idempotency_key) constraint must surface as either
-    the same payment or a 409 "still in progress", never as a 500 or as a
-    second payment.
+    The unique (merchant_id, idempotency_key) constraint must surface as the same
+    payment, either settled (201) or still pending (202), never as a 500 or as a
+    second payment. test_pending_payments.py also proves the bank is called once.
     """
     concurrency = 10
     key = str(uuid.uuid4())
@@ -298,17 +267,15 @@ async def test_concurrent_requests_with_same_idempotency_key_create_one_payment(
     )
 
     statuses = [r.status_code for r in responses]
-    assert set(statuses) <= {200, 201, 409}, statuses
-
-    succeeded = [r.json() for r in responses if r.status_code in (200, 201)]
-    assert succeeded, f"no request succeeded: {statuses}"
-    payment_ids = {body["id"] for body in succeeded}
+    assert set(statuses) <= {201, 202}, statuses
+    assert 201 in statuses, f"no request settled the payment: {statuses}"
+    payment_ids = {r.json()["id"] for r in responses}
     assert len(payment_ids) == 1, f"one key created several payments: {payment_ids}"
 
     # Once the race settles, a retry returns that same single payment.
     (payment_id,) = payment_ids
     retry = await create_payment(client, api_key, payload, key)
-    assert retry.status_code in (200, 201)
+    assert retry.status_code == 201
     assert retry.json()["id"] == payment_id
     assert retry.json()["status"] == "Authorized"
 
