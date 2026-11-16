@@ -12,11 +12,12 @@ WORKDIR /app
 RUN pip install --no-cache-dir "poetry==${POETRY_VERSION}"
 
 COPY pyproject.toml poetry.lock README.md ./
-RUN poetry install --only main --no-root
+RUN poetry install --no-root
 
 COPY alembic.ini main.py ./
 COPY migrations ./migrations
 COPY payment_gateway_api ./payment_gateway_api
+COPY tests ./tests
 
 EXPOSE 8000
 

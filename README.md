@@ -4,10 +4,12 @@ A payment gateway API that lets merchants process card payments through a simula
 
 ## How to run
 
+Only Docker and `make` are needed: every command runs inside a container.
+
 ```bash
-docker compose up -d --build            # API, Postgres and bank simulator
-make migrate                            # apply DB migrations
-make create-merchant NAME="Acme Shop"   # prints the merchant API key (shown once)
+make run
+make migrate
+make create-merchant NAME="Acme Shop"
 ```
 
 Open `http://localhost:8000/docs` and authorize with the merchant API key. Requests are
@@ -17,8 +19,7 @@ authenticated with `Authorization: Bearer <api-key>`, and `POST /payments` also 
 ### Production
 
 ```bash
-make run-prod WORKERS=4                                    # locally, production settings
-docker build -f prod.Dockerfile -t payment-gateway-api .   # production image
+docker build -f prod.Dockerfile -t payment-gateway-api .
 ```
 
 In production mode the API docs (`/docs`, `/redoc`, `/openapi.json`) are disabled and logs are JSON.
@@ -26,6 +27,7 @@ In production mode the API docs (`/docs`, `/redoc`, `/openapi.json`) are disable
 ### Quality
 
 `make test`, `make test-unit`, `make test-integration`, `make lint`, `make format`, `make coverage`.
+`make stop` stops all containers.
 
 ### CI/CD
 

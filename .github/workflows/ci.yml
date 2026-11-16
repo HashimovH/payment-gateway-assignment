@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, master]
+    branches: [master]
     paths: &code-paths
       - "payment_gateway_api/**"
       - "tests/**"

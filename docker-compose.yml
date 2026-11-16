@@ -5,10 +5,12 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./payment_gateway_api:/app/payment_gateway_api
+      - .:/app
     environment:
       BANK_URL: http://bank_simulator:8080
       DATABASE_URL: postgresql://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-gateway}@postgres:5432/${POSTGRES_DB:-payment_gateway}
+      TEST_BANK_URL: http://bank_simulator:8080
+      TEST_DATABASE_URL: postgresql://${TEST_POSTGRES_USER:-gateway}:${TEST_POSTGRES_PASSWORD:-gateway}@test_db:5432/${TEST_POSTGRES_DB:-payment_gateway_test}
     depends_on:
       postgres:
         condition: service_healthy
