@@ -41,7 +41,11 @@ test-db-down:
 
 .PHONY: lint
 lint:
-	@$(API) sh -c "ruff check . && ruff format --check ."
+	@$(API) sh -c "ruff check . && ruff format --check . && mypy"
+
+.PHONY: typecheck
+typecheck:
+	@$(API) mypy
 
 .PHONY: format
 format:

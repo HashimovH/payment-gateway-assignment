@@ -6,6 +6,7 @@
 - anything else           -> 500 internal_error, logged, no internals leaked
 """
 
+from collections.abc import Mapping
 from http import HTTPStatus
 from typing import Any
 
@@ -29,7 +30,7 @@ def error_response(
     code: str,
     message: str,
     details: dict[str, Any] | None = None,
-    headers: dict[str, str] | None = None,
+    headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     body = ErrorResponse(code=code, message=message, details=details)
     return JSONResponse(

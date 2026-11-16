@@ -26,7 +26,8 @@ In production mode the API docs (`/docs`, `/redoc`, `/openapi.json`) are disable
 
 ### Quality
 
-`make test`, `make test-unit`, `make test-integration`, `make lint`, `make format`, `make coverage`.
+`make test`, `make test-unit`, `make test-integration`, `make lint` (ruff and mypy), `make typecheck`,
+`make format`, `make coverage`.
 `make stop` stops all containers.
 
 ### CI/CD
@@ -42,7 +43,8 @@ python-setup ──┬── lint ──────────────┐
 - **python-setup** checks that `poetry.lock` matches `pyproject.toml`, installs the dependencies
   once and caches the virtualenv. The other jobs reuse it through
   [python-job](.github/actions/python-job/action.yml), so Poetry runs only in this job.
-- **lint** runs `ruff check` and `ruff format --check`.
+- **lint** runs `ruff check`, `ruff format --check` and `mypy` (strict for the application code;
+  tests are checked too, without requiring annotations).
 - **unit-tests** and **integration-tests** run with coverage and upload JUnit and coverage
   reports. Integration tests start the test database and bank simulator with `docker compose`,
   the same services as `make test-db-up`.

@@ -90,6 +90,9 @@ jobs:
       - name: Ruff format check
         run: ruff format --check .
 
+      - name: Type check
+        run: mypy
+
   unit-tests:
     name: Unit tests
     needs: python-setup
