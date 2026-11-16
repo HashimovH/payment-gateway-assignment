@@ -116,7 +116,7 @@ class PaymentService:
         self, payment: Payment, data: PaymentRequest
     ) -> BankPaymentResponse | None:
         try:
-            response = await self._bank_client.authorize_payment(data)
+            response = await self._bank_client.authorize_payment(data, reference=payment.id)
         except ExternalServiceUnavailableError as exc:
             logger.warning("bank_unavailable", payment_id=payment.id, error=str(exc))
             if not await self._release(payment):

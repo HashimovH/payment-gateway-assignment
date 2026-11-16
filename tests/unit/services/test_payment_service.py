@@ -112,9 +112,11 @@ class FakeBank:
             authorized=True, authorization_code="auth-123"
         )
         self._error = error
+        self.references: list[uuid.UUID] = []
 
-    async def authorize_payment(self, _request):
+    async def authorize_payment(self, _request, *, reference):
         self.calls += 1
+        self.references.append(reference)
         if self._error:
             raise self._error
         return self._response
@@ -157,6 +159,14 @@ async def test_authorized_payment_is_stored_with_code():
     assert repo.rows[MERCHANT_ID, KEY].authorization_code == "auth-123"
     assert response.card_number_last_four == "8877"
     assert response.currency is Currency.GBP
+
+
+async def test_bank_receives_the_payment_id_as_reference():
+    repo, bank = FakePaymentRepository(), FakeBank()
+
+    response = await make_service(repo, bank).process_payment(make_request(), MERCHANT_ID, KEY)
+
+    assert bank.references == [response.id]
 
 
 async def test_declined_payment_is_stored_without_code():

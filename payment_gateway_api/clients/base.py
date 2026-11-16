@@ -39,9 +39,11 @@ class BaseHTTPClient:
     async def __aexit__(self, *exc_info: object) -> None:
         await self.aclose()
 
-    async def _post(self, path: str, payload: dict[str, Any]) -> Any:
+    async def _post(
+        self, path: str, payload: dict[str, Any], headers: dict[str, str] | None = None
+    ) -> Any:
         try:
-            response = await self._client.post(path, json=payload)
+            response = await self._client.post(path, json=payload, headers=headers)
         except _NOT_SENT_ERRORS as exc:
             raise ExternalServiceUnavailableError(
                 self.service_name, str(exc) or "connection failed"
