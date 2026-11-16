@@ -52,6 +52,30 @@ python-setup ──┬── lint ──────────────┐
 
 The image is built but not yet pushed or deployed. The next step is to push it to a registry, run the helm upgrade and use `initcontainers` for migrations there.
 
+## Try it
+
+The bank simulator decides the outcome by the card number's last digit:
+
+| Card number        | Outcome                        | Response                 |
+|--------------------|--------------------------------|--------------------------|
+| `2222405343248877` | ends in an odd digit           | `201`, `Authorized`      |
+| `2222405343248112` | ends in 2, 4, 6 or 8           | `201`, `Declined`        |
+| `2222405343248870` | ends in 0: bank unavailable    | `503`, `bank_unavailable`|
+
+```bash
+curl -s http://localhost:8000/payments \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -H "Content-Type: application/json" \
+  -d '{"card_number": "2222405343248877", "expiry_month": 4, "expiry_year": 2030,
+       "currency": "GBP", "amount": 1050, "cvv": "123"}'
+
+curl -s http://localhost:8000/payments/$PAYMENT_ID -H "Authorization: Bearer $API_KEY"
+```
+
+Send the same request twice with the same `Idempotency-Key` to get the original payment back;
+change the amount with the same key to get `422`.
+
 ## Design decisions
 
 A payment request goes through these steps:
@@ -86,28 +110,26 @@ bank's lookup can find it by that reference.
 
 ## Future plans
 
-1. Background job setup, including the reconciliation job for `Pending` payments: look each one
-   up at the bank by its payment id, record the outcome with the same `Pending`-only update as the
-   request, and alert on payments that can't be confirmed.
-2. Kubernetes Helm charts for the API, cron jobs, and an init container that runs migrations.
-3. A readiness check that queries the database, and configurable connection pool sizes.
-4. Metrics and tracing with Prometheus and Grafana, starting with the four golden signals
-   (latency, traffic, errors, saturation).
-5. Dependency injection with [Dishka](https://github.com/reagento/dishka) in place of the
-   hand-written FastAPI dependencies, with explicit app, request and session scopes.
-6. A central router setup as the number of routers grows: one versioned API router (e.g. `/v1`)
-   that includes the feature routers, so `app.py` only mounts a single router.
-7. Asynchronous payment processing. The bank call currently happens inside the request. The plan
-   is a transactional outbox: payments are processed and their status checked asynchronously,
-   with retries where needed, and merchants are notified of status changes through webhooks.
-8. Rate limiting per merchant, starting with `POST /payments`.
-9. `CLAUDE.md` and `AGENTS.md` files that describe the project's conventions and workflows for
-   AI coding agents.
-10. A status page for bank outages. When the acquiring bank is down, we can tell merchants about
-    it there and switch off payments to that bank with one change. New payments then fail fast
-    with a clear error instead of waiting for timeouts.
+In priority order:
+
+1. **Reconciliation job** for `Pending` payments: look each one up at the bank by its payment id,
+   record the outcome with the same `Pending`-only update as the request, and alert on payments
+   that can't be confirmed. Today they stay `Pending` until settled by hand.
+2. **Metrics and alerts**: payments by final status, bank latency by outcome class, and the age of
+   the oldest `Pending` payment, which shows stuck payments before merchants report them.
+3. **Readiness check** that queries the database, separate bank connect and read timeouts, and
+   configurable connection pool sizes, so a bank or database outage fails fast.
+4. **Rate limiting per merchant**, starting with `POST /payments`, so one merchant can't exhaust
+   the connection pool or the bank's limits for everyone.
+5. **A switch for bank outages**: turn payments to a bank off with one change and publish it on a
+   status page, so new payments fail fast with a clear error instead of waiting for timeouts.
+6. **Asynchronous processing** with a transactional outbox and merchant webhooks, once the bank
+   deduplicates retries and card data is tokenized.
 
 ## AI Usage
 
-During the research phase I used AI to discuss the base setup and to learn how the payment gateway domain works. The tests were generated with AI. Throughout development I used AI as an
-assistant rather than delegating everything to it, so that I could ensure the code quality myself.
+During the research phase I used AI to discuss the base setup and to learn how the payment gateway
+domain works. The tests were generated with AI. I also used AI to review the finished submission
+and to help implement the follow-up fixes, which I reviewed and merged as separate pull requests.
+Throughout development I used AI as an assistant rather than delegating everything to it, so that
+I could ensure the code quality myself.
