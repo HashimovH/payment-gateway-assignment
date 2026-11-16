@@ -88,6 +88,9 @@ being lost. A background reconciliation job would then check those records again
 8. Rate limiting per merchant, starting with `POST /payments`.
 9. `CLAUDE.md` and `AGENTS.md` files that describe the project's conventions and workflows for
    AI coding agents.
+10. A status page for bank outages. When the acquiring bank is down, we can tell merchants about
+    it there and switch off payments to that bank with one change. New payments then fail fast
+    with a clear error instead of waiting for timeouts.
 
 ## AI Usage
 
