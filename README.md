@@ -46,4 +46,8 @@ lost. A background reconciliation job would then check those records against the
 1. Background job setup, including the reconciliation job for `Pending` payments.
 2. Kubernetes Helm charts for the API, cron jobs, and an init container that runs migrations.
 3. A readiness check that queries the database, and configurable connection pool sizes.
-4. Metrics and tracing.
+4. Metrics and tracing via Prometheus, Grafana. Specially Golden Metrics at least
+5. Dependency injection with [Dishka](https://github.com/reagento/dishka) in place of the
+   hand-written FastAPI dependencies, with explicit app, request and session scopes.
+6. A central router setup as the number of routers grows: one versioned API router (e.g. `/v1`)
+   that includes the feature routers, so `app.py` only mounts a single router.

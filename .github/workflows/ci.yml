@@ -6,9 +6,15 @@ on:
     paths: &code-paths
       - "payment_gateway_api/**"
       - "tests/**"
+      - "migrations/**"
+      - "imposters/**"
+      - "alembic.ini"
       - "pyproject.toml"
       - "poetry.lock"
+      - "docker-compose.yml"
+      - "prod.Dockerfile"
       - ".github/workflows/ci.yml"
+      - ".github/actions/**"
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths: *code-paths
@@ -25,52 +31,154 @@ permissions:
 env:
   PYTHON_VERSION: "3.15"
   POETRY_VERSION: "1.8.4"
-  # Keep in sync with ruff in pyproject.toml / poetry.lock.
-  RUFF_VERSION: "0.17.4"
 
 jobs:
-  lint:
-    name: Lint
-    # Draft PRs are work in progress: skip until marked ready for review.
-    if: github.event.pull_request.draft != true
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-
-      # Ruff is a single binary: no Python setup or dependency install needed.
-      - name: Ruff lint
-        run: pipx run "ruff==${RUFF_VERSION}" check . --output-format=github
-
-      - name: Ruff format check
-        run: pipx run "ruff==${RUFF_VERSION}" format --check .
-
-  unit-tests:
-    name: Unit tests
+  python-setup:
+    name: Python setup
     if: github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      venv-key: ${{ steps.key.outputs.venv-key }}
+    env:
+      POETRY_VIRTUALENVS_IN_PROJECT: "true"
     steps:
       - uses: actions/checkout@v7
+
+      - id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - id: key
+        run: echo "venv-key=venv-${{ runner.os }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('poetry.lock') }}" >> "$GITHUB_OUTPUT"
 
       - name: Install Poetry
         run: pipx install "poetry==${POETRY_VERSION}"
 
-      # cache: poetry caches Poetry's download cache and the virtualenv, keyed
-      # on poetry.lock: a hit skips almost all of the install.
-      - uses: actions/setup-python@v7
+      # Fails when pyproject.toml was changed without regenerating poetry.lock.
+      - name: Check lock file
+        run: poetry check --lock
+
+      - id: cache
+        uses: actions/cache@v4
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: poetry
+          path: .venv
+          key: ${{ steps.key.outputs.venv-key }}
 
       - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           poetry env use python
           poetry install --no-interaction
 
+  lint:
+    name: Lint
+    needs: python-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/python-job
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-key: ${{ needs.python-setup.outputs.venv-key }}
+
+      - name: Ruff lint
+        run: ruff check . --output-format=github
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+  unit-tests:
+    name: Unit tests
+    needs: python-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/python-job
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-key: ${{ needs.python-setup.outputs.venv-key }}
+
       - name: Run unit tests with coverage
-        run: poetry run pytest tests/unit --cov --cov-report=term-missing
+        run: >
+          python -m pytest tests/unit
+          --cov --cov-report=term-missing --cov-report=xml --junitxml=junit.xml
 
       - name: Coverage summary
         if: always()
-        run: poetry run coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+        run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-reports
+          path: |
+            coverage.xml
+            junit.xml
+          retention-days: 7
+
+  integration-tests:
+    name: Integration tests
+    needs: python-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # Same services as `make test-db-up`: test_db on :5433, bank_simulator on :8080.
+      - name: Start test database and bank simulator
+        run: docker compose up -d --wait test_db bank_simulator
+
+      - uses: ./.github/actions/python-job
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          venv-key: ${{ needs.python-setup.outputs.venv-key }}
+
+      - name: Run integration tests with coverage
+        run: >
+          python -m pytest tests/integration -vv
+          --cov --cov-report=term-missing --cov-report=xml --junitxml=junit.xml
+
+      - name: Coverage summary
+        if: always()
+        run: coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-reports
+          path: |
+            coverage.xml
+            junit.xml
+          retention-days: 7
+
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose logs test_db bank_simulator
+
+      - name: Stop services
+        if: always()
+        run: docker compose --profile test down -v
+
+  build-image:
+    name: Build production image
+    needs: [lint, unit-tests, integration-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: prod.Dockerfile
+          target: production
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

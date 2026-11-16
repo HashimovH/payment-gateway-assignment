@@ -1,0 +1,24 @@
+name: Python job
+description: Set up Python and restore the virtualenv built by the python-setup job.
+
+inputs:
+  python-version:
+    required: true
+  venv-key:
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v7
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - uses: actions/cache/restore@v4
+      with:
+        path: .venv
+        key: ${{ inputs.venv-key }}
+        fail-on-cache-miss: true
+
+    - shell: bash
+      run: echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
