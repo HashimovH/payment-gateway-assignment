@@ -9,7 +9,7 @@ Only Docker and `make` are needed: every command runs inside a container.
 ```bash
 make run
 make migrate
-make create-merchant NAME="Acme Shop"
+make create-merchant NAME="HashTech Shop"
 ```
 
 Open `http://localhost:8000/docs` and authorize with the merchant API key. Requests are
@@ -113,23 +113,25 @@ bank's lookup can find it by that reference.
 In priority order:
 
 1. **Reconciliation job** for `Pending` payments: look each one up at the bank by its payment id,
-   record the outcome with the same `Pending`-only update as the request, and alert on payments
-   that can't be confirmed. Today they stay `Pending` until settled by hand.
+   record the outcome with the same id and settle the transaction result.
 2. **Metrics and alerts**: payments by final status, bank latency by outcome class, and the age of
    the oldest `Pending` payment, which shows stuck payments before merchants report them.
-3. **Readiness check** that queries the database, separate bank connect and read timeouts, and
+3. **Readiness check** that queries the database, separate bank connection and read timeouts, and
    configurable connection pool sizes, so a bank or database outage fails fast.
 4. **Rate limiting per merchant**, starting with `POST /payments`, so one merchant can't exhaust
    the connection pool or the bank's limits for everyone.
 5. **A switch for bank outages**: turn payments to a bank off with one change and publish it on a
    status page, so new payments fail fast with a clear error instead of waiting for timeouts.
-6. **Asynchronous processing** with a transactional outbox and merchant webhooks, once the bank
-   deduplicates retries and card data is tokenized.
+6. **Asynchronous processing** with a transactional outbox and merchant webhooks, including notification logic for updates on transaction status.
 
 ## AI Usage
 
-During the research phase I used AI to discuss the base setup and to learn how the payment gateway
+During the research phase, I used AI to discuss the base setup and to learn how the payment gateway
 domain works. The tests were generated with AI. I also used AI to review the finished submission
 and to help implement the follow-up fixes, which I reviewed and merged as separate pull requests.
-Throughout development I used AI as an assistant rather than delegating everything to it, so that
+Throughout development, I used AI as an assistant rather than delegating everything to it, so that
 I could ensure the code quality myself.
+For long-term development of the API, I would include CLAUDE.md and AGENTS.md to put our conventions
+to make sure the code quality and guardrails for the project. Adding multiple skills such as 
+`code-reviewer`, `qa`, and so on would be useful for agentic workflows. Last but not least,
+Spec-driven development can be adopted for agentic development. 
