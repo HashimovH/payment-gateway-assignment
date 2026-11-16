@@ -55,7 +55,9 @@ The image is built but not yet pushed or deployed. The next step is to push it t
 A payment request goes through these steps:
 
 1. **Validation**: card number, expiry, currency, amount and CVV are checked first; invalid
-   requests never reach the database.
+   requests never reach the database or the bank. The spec's `Rejected` outcome is a
+   `400 validation_error` response listing the invalid fields, not a stored payment: nothing was
+   attempted, so there is no payment to retrieve later.
 2. **Pending record**: the payment is saved as `Pending` together with its `Idempotency-Key`, so a
    retried request can't charge the card twice.
 3. **Bank call**: the request is sent to the acquiring bank, and the record is updated to

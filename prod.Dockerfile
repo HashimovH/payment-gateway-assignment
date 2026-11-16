@@ -14,17 +14,6 @@ COPY pyproject.toml poetry.lock README.md ./
 RUN poetry install --only main --no-root
 
 
-# CI image: runtime deps + dev tools + tests, used for lint and test jobs
-FROM deps AS base
-
-RUN poetry install --only dev --no-root
-
-COPY alembic.ini main.py ./
-COPY migrations ./migrations
-COPY payment_gateway_api ./payment_gateway_api
-COPY tests ./tests
-
-
 FROM deps AS production
 
 RUN pip uninstall -y poetry
